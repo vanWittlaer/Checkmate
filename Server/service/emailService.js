@@ -1,4 +1,4 @@
-import { fileURLToPath } from "url";
+import {fileURLToPath} from "url";
 import path from "path";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -10,131 +10,155 @@ const SERVICE_NAME = "EmailService";
  * Represents an email service that can load templates, build, and send emails.
  */
 class EmailService {
-	static SERVICE_NAME = SERVICE_NAME;
-	/**
-	 * Constructs an instance of the EmailService, initializing template loaders and the email transporter.
-	 * @param {Object} settingsService - The settings service to get email configuration.
-	 * @param {Object} fs - The file system module.
-	 * @param {Object} path - The path module.
-	 * @param {Function} compile - The Handlebars compile function.
-	 * @param {Function} mjml2html - The MJML to HTML conversion function.
-	 * @param {Object} nodemailer - The nodemailer module.
-	 * @param {Object} logger - The logger module.
-	 */
-	constructor(settingsService, fs, path, compile, mjml2html, nodemailer, logger) {
-		this.settingsService = settingsService;
-		this.fs = fs;
-		this.path = path;
-		this.compile = compile;
-		this.mjml2html = mjml2html;
-		this.nodemailer = nodemailer;
-		this.logger = logger;
+    static SERVICE_NAME = SERVICE_NAME;
 
-		/**
-		 * Loads an email template from the filesystem.
-		 *
-		 * @param {string} templateName - The name of the template to load.
-		 * @returns {Function} A compiled template function that can be used to generate HTML email content.
-		 */
-		this.loadTemplate = (templateName) => {
-			try {
-				const templatePath = this.path.join(
-					__dirname,
-					`../templates/${templateName}.mjml`
-				);
-				const templateContent = this.fs.readFileSync(templatePath, "utf8");
-				return this.compile(templateContent);
-			} catch (error) {
-				this.logger.error({
-					message: error.message,
-					service: SERVICE_NAME,
-					method: "loadTemplate",
-					stack: error.stack,
-				});
-			}
-		};
+    /**
+     * Constructs an instance of the EmailService, initializing template loaders and the email transporter.
+     * @param {Object} settingsService - The settings service to get email configuration.
+     * @param {Object} fs - The file system module.
+     * @param {Object} path - The path module.
+     * @param {Function} compile - The Handlebars compile function.
+     * @param {Function} mjml2html - The MJML to HTML conversion function.
+     * @param {Object} nodemailer - The nodemailer module.
+     * @param {Object} logger - The logger module.
+     */
+    constructor(settingsService, fs, path, compile, mjml2html, nodemailer, logger) {
+        this.settingsService = settingsService;
+        this.fs = fs;
+        this.path = path;
+        this.compile = compile;
+        this.mjml2html = mjml2html;
+        this.nodemailer = nodemailer;
+        this.logger = logger;
 
-		/**
-		 * A lookup object to access preloaded email templates.
-		 * @type {Object.<string, Function>}
-		 * TODO  Load less used templates in their respective functions
-		 */
-		this.templateLookup = {
-			welcomeEmailTemplate: this.loadTemplate("welcomeEmail"),
-			employeeActivationTemplate: this.loadTemplate("employeeActivation"),
-			noIncidentsThisWeekTemplate: this.loadTemplate("noIncidentsThisWeek"),
-			serverIsDownTemplate: this.loadTemplate("serverIsDown"),
-			serverIsUpTemplate: this.loadTemplate("serverIsUp"),
-			passwordResetTemplate: this.loadTemplate("passwordReset"),
-			hardwareIncidentTemplate: this.loadTemplate("hardwareIncident"),
-		};
+        /**
+         * Loads an email template from the filesystem.
+         *
+         * @param {string} templateName - The name of the template to load.
+         * @returns {Function} A compiled template function that can be used to generate HTML email content.
+         */
+        this.loadTemplate = (templateName) => {
+            try {
+                const templatePath = this.path.join(
+                    __dirname,
+                    `../templates/${templateName}.mjml`
+                );
+                const templateContent = this.fs.readFileSync(templatePath, "utf8");
+                return this.compile(templateContent);
+            } catch (error) {
+                this.logger.error({
+                    message: error.message,
+                    service: SERVICE_NAME,
+                    method: "loadTemplate",
+                    stack: error.stack,
+                });
+            }
+        };
 
-		/**
-		 * The email transporter used to send emails.
-		 * @type {Object}
-		 */
+        /**
+         * A lookup object to access preloaded email templates.
+         * @type {Object.<string, Function>}
+         * TODO  Load less used templates in their respective functions
+         */
+        this.templateLookup = {
+            welcomeEmailTemplate: this.loadTemplate("welcomeEmail"),
+            employeeActivationTemplate: this.loadTemplate("employeeActivation"),
+            noIncidentsThisWeekTemplate: this.loadTemplate("noIncidentsThisWeek"),
+            serverIsDownTemplate: this.loadTemplate("serverIsDown"),
+            serverIsUpTemplate: this.loadTemplate("serverIsUp"),
+            passwordResetTemplate: this.loadTemplate("passwordReset"),
+            hardwareIncidentTemplate: this.loadTemplate("hardwareIncident"),
+        };
 
-		const { systemEmailHost, systemEmailPort, systemEmailAddress, systemEmailPassword } =
-			this.settingsService.getSettings();
+        /**
+         * The email transporter used to send emails.
+         * @type {Object}
+         */
 
-		const emailConfig = {
-			host: systemEmailHost,
-			port: systemEmailPort,
-			secure: true,
-			auth: {
-				user: systemEmailAddress,
-				pass: systemEmailPassword,
-			},
-		};
+        const {
+            systemEmailHost,
+            systemEmailPort,
+            systemEmailUser,
+            systemEmailAddress,
+            systemEmailPassword,
+            systemEmailEncryption,
+        } = this.settingsService.getSettings();
 
-		this.transporter = this.nodemailer.createTransport(emailConfig);
-	}
+        let emailConfig = {
+            host: systemEmailHost,
+            port: systemEmailPort,
+            auth: {
+                user: systemEmailUser,
+                pass: systemEmailPassword,
+            },
+        };
 
-	/**
-	 * Asynchronously builds and sends an email using a specified template and context.
-	 *
-	 * @param {string} template - The name of the template to use for the email body.
-	 * @param {Object} context - The data context to render the template with.
-	 * @param {string} to - The recipient's email address.
-	 * @param {string} subject - The subject of the email.
-	 * @returns {Promise<string>} A promise that resolves to the messageId of the sent email.
-	 */
-	buildAndSendEmail = async (template, context, to, subject) => {
-		const buildHtml = async (template, context) => {
-			try {
-				const mjml = this.templateLookup[template](context);
-				const html = await this.mjml2html(mjml);
-				return html.html;
-			} catch (error) {
-				this.logger.error({
-					message: error.message,
-					service: SERVICE_NAME,
-					method: "buildAndSendEmail",
-					stack: error.stack,
-				});
-			}
-		};
+        if (systemEmailEncryption === 'ssl') {
+            emailConfig.secure = true; // SSL (SMTPS)
+        } else if (systemEmailEncryption === 'starttls') {
+            emailConfig.secure = false; // STARTTLS
+            emailConfig.requireTLS = true;
+            // Optionally, you can add more TLS options here
+        } else if (systemEmailEncryption === 'tls') {
+            emailConfig.secure = false; // TLS (explicit)
+            emailConfig.tls = {rejectUnauthorized: false}; // Accept self-signed certs if needed
+        } else {
+            // Default to STARTTLS for compatibility
+            emailConfig.secure = false;
+            emailConfig.requireTLS = true;
+        }
 
-		const sendEmail = async (to, subject, html) => {
-			try {
-				const info = await this.transporter.sendMail({
-					to: to,
-					subject: subject,
-					html: html,
-				});
-				return info;
-			} catch (error) {
-				this.logger.error({
-					message: error.message,
-					service: SERVICE_NAME,
-					method: "sendEmail",
-					stack: error.stack,
-				});
-			}
-		};
-		const html = await buildHtml(template, context);
-		const info = await sendEmail(to, subject, html);
-		return info?.messageId;
-	};
+        this.transporter = this.nodemailer.createTransport(emailConfig);
+    }
+
+    /**
+     * Asynchronously builds and sends an email using a specified template and context.
+     *
+     * @param {string} template - The name of the template to use for the email body.
+     * @param {Object} context - The data context to render the template with.
+     * @param {string} to - The recipient's email address.
+     * @param {string} subject - The subject of the email.
+     * @returns {Promise<string>} A promise that resolves to the messageId of the sent email.
+     */
+    buildAndSendEmail = async (template, context, to, subject) => {
+        const buildHtml = async (template, context) => {
+            try {
+                const mjml = this.templateLookup[template](context);
+                const html = await this.mjml2html(mjml);
+                return html.html;
+            } catch (error) {
+                this.logger.error({
+                    message: error.message,
+                    service: SERVICE_NAME,
+                    method: "buildAndSendEmail",
+                    stack: error.stack,
+                });
+            }
+        };
+
+        const sendEmail = async (to, subject, html) => {
+            try {
+                const { systemEmailAddress } = this.settingsService.getSettings();
+                const info = await this.transporter.sendMail({
+                    from: systemEmailAddress,
+                    to: to,
+                    subject: subject,
+                    html: html,
+                });
+                return info;
+            } catch (error) {
+                this.logger.error({
+                    message: error.message,
+                    service: SERVICE_NAME,
+                    method: "sendEmail",
+                    stack: error.stack,
+                });
+            }
+        };
+        const html = await buildHtml(template, context);
+        const info = await sendEmail(to, subject, html);
+        return info?.messageId;
+    };
 }
+
 export default EmailService;
