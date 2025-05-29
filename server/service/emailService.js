@@ -127,12 +127,9 @@ class EmailService {
 					secure: false,
 					pool: true,
 					tls: { rejectUnauthorized: false },
+				 	requireTLS: true,
 				}
 			: baseEmailConfig;
-
-		if (!isSmtps) {
-			delete emailConfig.auth;
-		}
 
 		this.transporter = this.nodemailer.createTransport(emailConfig);
 
